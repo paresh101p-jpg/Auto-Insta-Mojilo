@@ -4,6 +4,7 @@ import subprocess
 import requests
 from google import genai
 from PIL import Image
+import urllib.parse
 
 # Secrets from GitHub Actions
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -21,7 +22,7 @@ print(f"[DEBUG] Token starts with: {FB_ACCESS_TOKEN[:20]}...")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS  = ["gemini-1.5-flash", "gemini-1.5-pro"]
+GEMINI_MODELS  = ["gemini-2.0-flash-exp", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"]
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/master/"
 
 def get_next_media():
@@ -245,7 +246,8 @@ def main():
         is_video = media_filename.lower().endswith('.mp4')
         
         clean_path = media_path.replace("\\", "/")
-        public_media_url = GITHUB_REPO_RAW_URL + clean_path
+        encoded_path = "/".join([urllib.parse.quote(p) for p in clean_path.split("/")])
+        public_media_url = GITHUB_REPO_RAW_URL + encoded_path
         print(f"Generated Public URL: {public_media_url}")
 
         caption = generate_caption(media_path)
