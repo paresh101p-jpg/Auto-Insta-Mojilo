@@ -51,7 +51,7 @@ def generate_caption(media_path):
         "3. A call to action exactly like this:\n\n"
         "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👕🔥\n"
         "Follow for more amazing designs! 👇\n"
-        "👉 @mojilo.in\n\n"
+        "👉 @MOJILOMART\n\n"
         "Like ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n"
         "4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.). "
         "Do not include any extra text outside the caption itself."
@@ -94,7 +94,7 @@ def generate_caption(media_path):
             except:
                 pass
     
-    return """Upgrade your style with custom printed T-shirts! 👕🔥\n\nDM us for the best Custom T-Shirt Printing and DTF Stickers in Surat!\n\nFollow for more amazing designs! 👇\n👉 @mojilo.in\n\nLike ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #surat"""
+    return """Upgrade your style with custom printed T-shirts! 👕🔥\n\nDM us for the best Custom T-Shirt Printing and DTF Stickers in Surat!\n\nFollow for more amazing designs! 👇\n👉 @MOJILOMART\n\nLike ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #surat"""
 
 def get_ig_account_id():
     print("Fetching connected Instagram Account ID...")
@@ -109,7 +109,7 @@ def get_ig_account_id():
 
 def post_fb_feed(caption, media_url, is_video=False):
     print(f"Posting to Facebook Feed ({'Video' if is_video else 'Photo'})...")
-    fb_caption = caption.replace("@mojilo.in", "@MOJILO")
+    fb_caption = caption
     
     if is_video:
         url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
