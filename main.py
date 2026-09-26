@@ -52,7 +52,7 @@ def generate_caption(media_path):
         "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👕🔥\n"
         "Follow for more amazing designs! 👇\n"
         "Instagram: @MOJILOMART\n"
-        "Facebook: https://www.facebook.com/MojiloMart\n\n"
+        "Facebook: @MojiloMart\n\n"
         "Like ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n"
         "4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.). "
         "Do not include any extra text outside the caption itself."
@@ -95,7 +95,7 @@ def generate_caption(media_path):
             except:
                 pass
     
-    return """Upgrade your style with custom printed T-shirts! 👕🔥\n\nDM us for the best Custom T-Shirt Printing and DTF Stickers in Surat!\n\nFollow for more amazing designs! 👇\nInstagram: @MOJILOMART\nFacebook: https://www.facebook.com/MojiloMart\n\nLike ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #surat"""
+    return """Upgrade your style with custom printed T-shirts! 👕🔥\n\nDM us for the best Custom T-Shirt Printing and DTF Stickers in Surat!\n\nFollow for more amazing designs! 👇\nInstagram: @MOJILOMART\nFacebook: @MojiloMart\n\nLike ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #surat"""
 
 def get_ig_account_id():
     print("Fetching connected Instagram Account ID...")
