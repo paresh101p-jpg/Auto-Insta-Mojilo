@@ -5,7 +5,23 @@ import requests
 from google import genai
 from PIL import Image
 import urllib.parse
+import fallback_captions
+import json
+from datetime import datetime
 
+HISTORY_FILE = "post_history.json"
+
+def load_history():
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except: pass
+    return {}
+
+def save_history(history):
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(history, f)
 # Secrets from GitHub Actions
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 FB_ACCESS_TOKEN = os.environ.get("FB_ACCESS_TOKEN")
@@ -22,7 +38,7 @@ print(f"[DEBUG] Token starts with: {FB_ACCESS_TOKEN[:20]}...")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS  = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+GEMINI_MODELS  = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"]
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/master/"
 
 def get_next_media():
@@ -34,9 +50,31 @@ def get_next_media():
     ])
     if not files:
         raise Exception("No media left in 'images/' folder! Please upload more.")
-    chosen = os.path.join(IMAGES_FOLDER, files[0])
-    print(f"Using media: {chosen} ({len(files)} remaining)")
-    return chosen
+        
+    history = load_history()
+    now = datetime.now()
+    
+    for f in files:
+        base_name = os.path.splitext(f)[0]
+        if base_name in history:
+            last_date_str = history[base_name]
+            try:
+                last_post_date = datetime.fromisoformat(last_date_str)
+                days_passed = (now - last_post_date).days
+                if days_passed < 15:
+                    print(f"Skipping {f} (posted {days_passed} days ago, need 15)")
+                    continue
+            except: pass
+            
+        chosen = os.path.join(IMAGES_FOLDER, f)
+        print(f"Using media: {chosen} ({len(files)} remaining)")
+        
+        # Save to history immediately
+        history[base_name] = now.isoformat()
+        save_history(history)
+        return chosen
+        
+    raise Exception("No media available that hasn't been posted in the last 7 days!")
 
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
@@ -96,7 +134,8 @@ def generate_caption(media_path):
             except:
                 pass
     
-    return """Upgrade your style with custom printed T-shirts! 👕🔥\n\nDM us for the best Custom T-Shirt Printing and DTF Stickers in Surat!\n\nFollow for more amazing designs! 👇\nInstagram: @MOJILOMART\nFacebook: @MojiloMart\n\nLike ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #surat"""
+    print("All AI attempts failed. Using random dynamic fallback caption.")
+    return fallback_captions.get_random_fallback_caption()
 
 def get_ig_account_id():
     print("Fetching connected Instagram Account ID...")
@@ -263,6 +302,14 @@ def move_media_and_push(media_path):
 
 def move_back_to_images(posted_path):
     print(f"Moving {posted_path} back to images folder because post failed...")
+    base_name = os.path.splitext(os.path.basename(posted_path))[0]
+    
+    # Remove from history so it can be tried again
+    history = load_history()
+    if base_name in history:
+        del history[base_name]
+        save_history(history)
+        
     new_path = os.path.join(IMAGES_FOLDER, os.path.basename(posted_path))
     os.rename(posted_path, new_path)
     try:
