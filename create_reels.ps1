@@ -1,6 +1,6 @@
 $ffmpeg = "E:\Paresh\Auto Post\ffmpeg-master-latest-win64-gpl\ffmpeg-master-latest-win64-gpl\bin\ffmpeg.exe"
 $inputDir = "E:\Paresh\Auto Post\Auto-Insta-Mojilo\images"
-$musicDir = "E:\Paresh\Auto Post\Auto-Insta-Pooja\music"
+$musicDir = "E:\Paresh\Auto Post\Auto-Insta-Mojilo\music"
 $outputDir = "E:\Paresh\Auto Post\Auto-Insta-Mojilo\new_video"
 
 if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Force -Path $outputDir | Out-Null }
