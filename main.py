@@ -38,6 +38,9 @@ print(f"[DEBUG] Token starts with: {FB_ACCESS_TOKEN[:20]}...")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
+POSTED_FOLDER = "posted_images"
+REELS_FILE = "reels_urls.txt"
+TEMP_VIDEO = "temp_video.mp4"
 GEMINI_MODELS  = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"]
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/master/"
 
