@@ -73,9 +73,9 @@ def mark_url_as_used(url, is_video):
             git_commit_and_push(f"Used and removed URL from {filename}")
 
 def get_next_media():
-    import random
-    import requests
-    
+    if not os.path.exists(IMAGES_FOLDER):
+        os.makedirs(IMAGES_FOLDER)
+        
     last_type_file = "last_post_type.txt"
     last_type = "REEL"
     if os.path.exists(last_type_file):
@@ -84,88 +84,92 @@ def get_next_media():
             
     next_type = "REEL" if last_type == "IMAGE" else "IMAGE"
     print(f"Last post was {last_type}. Now attempting to post {next_type}...")
-    
 
-    def get_from_file(filename, is_video):
-        if os.path.exists(filename):
-            with open(filename, "r") as f:
-                urls = [line.strip() for line in f.readlines() if line.strip()]
+    def get_catbox_from_file(filename, is_video):
+        if not os.path.exists(filename): return None
+        with open(filename, "r") as f: urls = [line.strip() for line in f if line.strip()]
+        
+        used_urls = []
+        if os.path.exists("used_urls.txt"):
+            with open("used_urls.txt", "r") as f: used_urls = [line.strip() for line in f if line.strip()]
             
-            attempts = 0
-            while urls and attempts < 3:
-                chosen_url = random.choice(urls)
-                
-                temp_ext = ".mp4" if is_video else ".jpg"
-                temp_file = "temp_media" + temp_ext
-                print(f"Downloading from {chosen_url}...")
-                
-                import time
-                import requests
-                max_retries = 2
-                success_download = False
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-                
-                for attempt in range(max_retries):
-                    try:
-                        res = requests.get(chosen_url, headers=headers, timeout=15)
-                        if res.status_code == 200:
-                            with open(temp_file, "wb") as f:
-                                f.write(res.content)
-                            success_download = True
-                            break
-                        elif res.status_code == 404:
-                            print("URL returned 404. We will skip it.")
-                            break
-                        else:
-                            print(f"Attempt {attempt+1} failed to download: Status {res.status_code}")
-                    except Exception as e:
-                        print(f"Attempt {attempt+1} failed to download: {e}")
-                    time.sleep(2)
+        available_urls = [u for u in urls if u not in used_urls]
+        if not available_urls: return None
+        
+        chosen_url = available_urls[0]
+        print(f"Selected Catbox URL: {chosen_url}")
+        
+        import requests
+        temp_ext = ".mp4" if is_video else ".jpg"
+        temp_file = "temp_media" + temp_ext
+        
+        res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with open(temp_file, "wb") as mf:
+            mf.write(res_download.content)
+            
+        return {
+            "type": "catbox",
+            "local_path": temp_file,
+            "media_url": chosen_url,
+            "is_video": is_video,
+            "original_path": None
+        }
+
+    def get_image_from_github_folder():
+        import random
+        from datetime import datetime
+        import urllib.parse
+        history = load_history()
+        now = datetime.now()
+        files = [f for f in os.listdir(IMAGES_FOLDER) if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp"))]
+        random.shuffle(files)
+        
+        for f in files:
+            base_name = os.path.splitext(f)[0]
+            if base_name in history:
+                last_date_str = history[base_name]
+                try:
+                    last_post_date = datetime.fromisoformat(last_date_str)
+                    days_passed = (now - last_post_date).days
+                    if days_passed < 7: continue
+                except: pass
                     
-                if not success_download:
-                    print(f"Failed to download {chosen_url} entirely.")
-                    # Only remove if it was a 404 (file actually missing)
-                    if 'res' in locals() and res.status_code == 404:
-                        if chosen_url in urls:
-                            urls.remove(chosen_url)
-                            with open(filename, "w") as f:
-                                f.write("\n".join(urls))
-                    attempts += 1
-                    continue # Try next URL
-                    
-                # If we get here, download succeeded!
-                # DO NOT DELETE IT YET! Wait for Instagram post success!
-                return {
-                    "type": "catbox",
-                    "local_path": temp_file,
-                    "media_url": chosen_url,
-                    "is_video": is_video,
-                    "original_path": None
-                }
-            if attempts >= 3:
-                raise Exception("Failed to download media after trying 3 different URLs.")
+            chosen_local_path = os.path.join(IMAGES_FOLDER, f)
+            history[base_name] = now.isoformat()
+            save_history(history)
+            
+            if not os.path.exists(POSTED_FOLDER): os.makedirs(POSTED_FOLDER)
+            new_path = os.path.join(POSTED_FOLDER, f)
+            os.rename(chosen_local_path, new_path)
+            git_commit_and_push(f"Moved to posted: {f}")
+            
+            clean_path = new_path.replace("\\", "/")
+            encoded_path = "/".join([urllib.parse.quote(p) for p in clean_path.split("/")])
+            media_url = f"{GITHUB_REPO_RAW_URL}{encoded_path}"
+            
+            return {
+                "type": "local",
+                "local_path": new_path,
+                "media_url": media_url,
+                "is_video": False,
+                "original_path": chosen_local_path
+            }
         return None
+
     if next_type == "IMAGE":
-        res = get_from_file("images_urls.txt", False)
+        res = get_image_from_github_folder()
         if res:
             with open(last_type_file, "w") as f: f.write("IMAGE")
             return res
-        print("No images left, falling back to reel...")
-        next_type = "REEL"
 
     if next_type == "REEL":
-        res = get_from_file("reels_urls.txt", True)
+        res = get_catbox_from_file("reels_urls.txt", True)
         if res:
             with open(last_type_file, "w") as f: f.write("REEL")
             return res
-        
-        print("No reels left, falling back to image...")
-        res = get_from_file("images_urls.txt", False)
-        if res:
-            with open(last_type_file, "w") as f: f.write("IMAGE")
-            return res
-            
-    raise Exception("No media available at all! Please upload new media.")
+
+    print("Could not find media of the requested type.")
+    return None
 
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
