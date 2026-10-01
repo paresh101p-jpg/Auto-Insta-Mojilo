@@ -1,4 +1,4 @@
-import os
+﻿import os
 import time
 import subprocess
 import requests
@@ -90,7 +90,7 @@ def get_next_media():
         os.rename(chosen_local_path, new_path)
         git_commit_and_push(f"Moved to posted: {f}")
         
-        clean_path = new_path.replace("\", "/")
+        clean_path = new_path.replace("\\\\", "/")
         encoded_path = "/".join([urllib.parse.quote(p) for p in clean_path.split("/")])
         media_url = f"{GITHUB_REPO_RAW_URL}{encoded_path}"
         
@@ -173,11 +173,11 @@ def generate_caption(media_path):
         "1. A catchy hook line at the very top.\n"
         "2. A 3-4 line description about custom t-shirt printing, DTF stickers, trending fashion, or the specific design shown in the image.\n"
         "3. A call to action exactly like this:\n\n"
-        "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👕🔥\n"
-        "Follow for more amazing designs! 👇\n"
+        "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! ðŸ‘•ðŸ”¥\n"
+        "Follow for more amazing designs! ðŸ‘‡\n"
         "Instagram: @MOJILOMART\n"
         "Facebook: @MojiloMart\n\n"
-        "Like ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n"
+        "Like â¤ï¸ | Comment ðŸ’¬ | Share ðŸš€ | Save ðŸ“Œ\n\n"
         "4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.). "
         "Do not include any extra text outside the caption itself."
     )
@@ -246,10 +246,10 @@ def post_fb_feed(caption, media_url, is_video=False):
         
     res = requests.post(url, data=payload).json()
     if 'id' in res:
-        print(f"✅ FB Feed Success (ID: {res['id']})")
+        print(f"âœ… FB Feed Success (ID: {res['id']})")
         return True
     else:
-        print(f"❌ FB Feed Failed: {res}")
+        print(f"âŒ FB Feed Failed: {res}")
         return False
 
 def post_fb_story(image_url):
@@ -266,7 +266,7 @@ def post_fb_story(image_url):
     photo_id = upload_res.get('id')
 
     if not photo_id:
-        print(f"❌ FB Story Failed (photo upload step): {upload_res}")
+        print(f"âŒ FB Story Failed (photo upload step): {upload_res}")
         return False
 
     print(f"Uploaded unpublished photo for story (photo_id: {photo_id})")
@@ -280,10 +280,10 @@ def post_fb_story(image_url):
     story_res = requests.post(story_url, data=story_payload).json()
 
     if story_res.get('success') or 'post_id' in story_res or 'id' in story_res:
-        print(f"✅ FB Story Success: {story_res}")
+        print(f"âœ… FB Story Success: {story_res}")
         return True
     else:
-        print(f"❌ FB Story Failed (photo_stories step): {story_res}")
+        print(f"âŒ FB Story Failed (photo_stories step): {story_res}")
         return False
 
 def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=False):
@@ -312,7 +312,7 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
     creation_id = res.get('id')
     
     if not creation_id:
-        print(f"❌ IG Container Creation Failed for {target}: {res}")
+        print(f"âŒ IG Container Creation Failed for {target}: {res}")
         return False
         
     # Step 2: Publish Container
@@ -329,7 +329,7 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
             status = status_res.get('status_code', 'ERROR')
             print(f"Video Status: {status}")
             if status == "ERROR" or status == "EXPIRED":
-                print(f"❌ Video Processing Failed!")
+                print(f"âŒ Video Processing Failed!")
                 return False
     else:
         print("Waiting 15 seconds for Instagram to process the image...")
@@ -338,14 +338,14 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
     for attempt in range(6):
         pub_res = requests.post(pub_url, data=pub_payload).json()
         if 'id' in pub_res:
-            print(f"✅ IG {target} Success (ID: {pub_res['id']})")
+            print(f"âœ… IG {target} Success (ID: {pub_res['id']})")
             return True
         elif pub_res.get('error', {}).get('code') == 9007:
             # Media not ready, wait and retry
             print(f"Media not ready, retrying... (Attempt {attempt+1}/6)")
             time.sleep(10)
         else:
-            print(f"❌ IG Publish Failed for {target}: {pub_res}")
+            print(f"âŒ IG Publish Failed for {target}: {pub_res}")
             return False
             
     return False
@@ -443,9 +443,9 @@ def main():
             post_ig_media(ig_account_id, "", public_media_url, is_story=True, is_video=is_video)
 
         if success:
-            print("✅ All posts done successfully! Media is already in posted_images folder.")
+            print("âœ… All posts done successfully! Media is already in posted_images folder.")
         else:
-            print("❌ All posts failed. Moving media back to images folder so it's not lost.")
+            print("âŒ All posts failed. Moving media back to images folder so it's not lost.")
             move_back_to_images(media_path)
 
     except Exception as e:
