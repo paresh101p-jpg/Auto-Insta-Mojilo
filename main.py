@@ -231,7 +231,20 @@ Do not include any extra text outside the caption itself."""
             except:
                 pass
                 
-    return "What a stunning look! ðŸ˜âœ¨\n\nFor more amazing fashion & AI looks, follow us! ðŸ‘‡\nInstagram: @pooja.perfect_ai\nFacebook: @pooja.perfectai\n\nLike â¤ï¸ | Comment ðŸ’¬ | Share ðŸš€ | Save ðŸ“Œ\n\n#fashion #indianfashion #ootd #saree #beauty #poojaperfectai"
+    try:
+        import fallback_captions
+        return fallback_captions.get_random_caption()
+    except Exception as e:
+        print(f"Fallback captions failed too: {e}")
+        return "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
+
+Follow for more amazing designs! 👇🔥
+Instagram: @MOJILOMART
+Facebook: @MojiloMart
+
+Like 👍 💬 | Comment 💬 | Share 🚀 | Save 📌
+
+#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts"
 
 def get_ig_account_id():
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}?fields=instagram_business_account&access_token={FB_ACCESS_TOKEN}"
