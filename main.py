@@ -174,34 +174,23 @@ def get_next_media():
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
     print(f"Analyzing {'video' if is_video else 'image'} using Gemini Vision...")
-    prompt = (
-        "You are an expert Instagram Social Media Manager for a custom T-shirt printing and fashion page. Look at the content provided. "
-        "Write a long, engaging, and trendy Instagram caption in a mix of Hindi and English (Hinglish) inspired by the content. "
-        "Your response MUST be the final Instagram caption, formatted beautifully with emojis. "
-        "Include the following elements in this exact order:
-"
-        "1. A catchy hook line at the very top.
-"
-        "2. A 3-4 line description about custom t-shirt printing, DTF stickers, trending fashion, or the specific design shown in the image.
-"
-        "3. A call to action exactly like this:
+        prompt = """You are an expert Instagram Social Media Manager for a custom T-shirt printing and fashion page. Look at the content provided.
+Write a long, engaging, and trendy Instagram caption in a mix of Hindi and English (Hinglish) inspired by the content.
+Your response MUST be the final Instagram caption, formatted beautifully with emojis.
+Include the following elements in this exact order:
+1. A catchy hook line at the very top.
+2. A 3-4 line description about custom t-shirt printing, DTF stickers, trending fashion, or the specific design shown in the image.
+3. A call to action exactly like this:
 
-"
-        "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
-"
-        "Follow for more amazing designs! 👇🔥
-"
-        "Instagram: @MOJILOMART
-"
-        "Facebook: @MojiloMart
+DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
+Follow for more amazing designs! 👇🔥
+Instagram: @MOJILOMART
+Facebook: @MojiloMart
 
-"
-        "Like 👍 💬 | Comment 💬 | Share 🚀 | Save 📌
+Like 👍 💬 | Comment 💬 | Share 🚀 | Save 📌
 
-"
-        "4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.). "
-        "Do not include any extra text outside the caption itself."
-    )
+4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.).
+Do not include any extra text outside the caption itself."""
     
     content_to_pass = None
     uploaded_file = None
