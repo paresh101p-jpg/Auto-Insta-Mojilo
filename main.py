@@ -174,7 +174,7 @@ def get_next_media():
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
     print(f"Analyzing {'video' if is_video else 'image'} using Gemini Vision...")
-        prompt = """You are an expert Instagram Social Media Manager for a custom T-shirt printing and fashion page. Look at the content provided.
+    prompt = """You are an expert Instagram Social Media Manager for a custom T-shirt printing and fashion page. Look at the content provided.
 Write a long, engaging, and trendy Instagram caption in a mix of Hindi and English (Hinglish) inspired by the content.
 Your response MUST be the final Instagram caption, formatted beautifully with emojis.
 Include the following elements in this exact order:
