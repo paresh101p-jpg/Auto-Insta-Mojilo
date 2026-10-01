@@ -3,7 +3,7 @@ import time
 import subprocess
 import requests
 from google import genai
-from PIL import Image
+from PIL import Image, ImageFilter
 import urllib.parse
 import fallback_captions
 import json
@@ -451,5 +451,105 @@ def main():
         print(f"An error occurred: {e}")
         exit(1)
 
+
+def create_story_image(local_path):
+    try:
+        img = Image.open(local_path).convert("RGB")
+        target_w, target_h = 1080, 1920
+        bg = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=30))
+        w, h = img.size
+        scale = min(target_w / w, target_h / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        fg = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        y_offset = (target_h - new_h) // 2
+        x_offset = (target_w - new_w) // 2
+        bg.paste(fg, (x_offset, y_offset))
+        story_path = "story_temp.jpg"
+        bg.save(story_path, quality=95)
+        return story_path
+    except Exception as e:
+        print(f"Error creating story image: {e}")
+        return local_path
+
+def upload_to_catbox(file_path):
+    try:
+        import requests
+        print(f"Uploading {file_path} to Catbox for story...")
+        with open(file_path, 'rb') as f:
+            response = requests.post('https://catbox.moe/user/api.php', data={'reqtype': 'fileupload'}, files={'fileToUpload': f})
+        if response.status_code == 200:
+            return response.text.strip()
+    except Exception as e:
+        print(f"Catbox upload failed: {e}")
+    return None
+
 if __name__ == "__main__":
-    main()
+    try:
+        # Cleanup previously posted files to avoid large repo size
+        if os.path.exists(POSTED_FOLDER):
+            files = os.listdir(POSTED_FOLDER)
+            if files:
+                for f in files:
+                    os.remove(os.path.join(POSTED_FOLDER, f))
+                git_commit_and_push("Cleaned up old posted media")
+        
+        media_info = get_next_media()
+        print(f"Media URL for Graph API: {media_info['media_url']}")
+        
+        caption = generate_caption(media_info["local_path"])
+        
+        ig_account_id = get_ig_account_id()
+        if not ig_account_id:
+            raise Exception("No Instagram account linked to the page.")
+            
+        success = False
+        
+        # Prepare Story URL (if image, create blurred 9:16 background)
+        story_url = media_info["media_url"]
+        if not media_info["is_video"]:
+            story_local = create_story_image(media_info["local_path"])
+            if story_local != media_info["local_path"]:
+                catbox_url = upload_to_catbox(story_local)
+                if catbox_url:
+                    story_url = catbox_url
+                    print(f"Using Catbox URL for story: {story_url}")
+        
+        # Post to Instagram Feed/Reel
+        if post_ig_media(ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
+            success = True
+            
+        # Post to Instagram Story (using the story_url which has the blurred background for images)
+        post_ig_media(ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
+        
+        # Post to Facebook
+        if media_info["is_video"]:
+            # Need to ensure post_fb_video exists or just use feed
+            if "post_fb_video" in globals():
+                if post_fb_video(caption, media_info["media_url"]):
+                    success = True
+            else:
+                if post_fb_feed(caption, media_info["media_url"], is_video=True):
+                    success = True
+        else:
+            if post_fb_feed(caption, media_info["media_url"], is_video=False):
+                success = True
+            if "post_fb_story" in globals():
+                post_fb_story(story_url)
+        
+        if success:
+            print("Successfully posted!")
+        else:
+            if "handle_failure" in globals():
+                handle_failure(media_info)
+            else:
+                print("All posts failed.")
+            
+        if os.path.exists(TEMP_VIDEO):
+            os.remove(TEMP_VIDEO)
+        if os.path.exists("story_temp.jpg"):
+            os.remove("story_temp.jpg")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
