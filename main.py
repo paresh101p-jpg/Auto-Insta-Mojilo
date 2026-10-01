@@ -28,7 +28,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
 GEMINI_MODELS = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash"]
 # Yahan naye repo ka naam aayega (e.g., Auto-Insta-Mojilo)
-GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/master/"
+GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/main/"
 
 HISTORY_FILE = "post_history.json"
 POSTED_FOLDER = "posted_images"
