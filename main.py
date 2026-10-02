@@ -1,4 +1,4 @@
-﻿import os
+import os
 import random
 import time
 import subprocess
@@ -236,7 +236,7 @@ Do not include any extra text outside the caption itself."""
         return fallback_captions.get_random_caption()
     except Exception as e:
         print(f"Fallback captions failed too: {e}")
-        return "DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
+        return """DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
 
 Follow for more amazing designs! 👇🔥
 Instagram: @MOJILOMART
@@ -244,7 +244,7 @@ Facebook: @MojiloMart
 
 Like 👍 💬 | Comment 💬 | Share 🚀 | Save 📌
 
-#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts"
+#mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts"""
 
 def get_ig_account_id():
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}?fields=instagram_business_account&access_token={FB_ACCESS_TOKEN}"
