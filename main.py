@@ -160,12 +160,14 @@ def get_next_media():
         res = get_image_from_github_folder()
         if res:
             with open(last_type_file, "w") as f: f.write("IMAGE")
+            git_commit_and_push("Update last post type to IMAGE")
             return res
 
     if next_type == "REEL":
         res = get_catbox_from_file("reels_urls.txt", True)
         if res:
             with open(last_type_file, "w") as f: f.write("REEL")
+            git_commit_and_push("Update last post type to REEL")
             return res
 
     print("Could not find media of the requested type.")
