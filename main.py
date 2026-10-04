@@ -96,30 +96,47 @@ def get_next_media():
         available_urls = [u for u in urls if u not in used_urls]
         if not available_urls: return None
         
-        chosen_url = available_urls[0]
-        print(f"Selected Catbox URL: {chosen_url}")
-        
         import requests
         temp_ext = ".mp4" if is_video else ".jpg"
         temp_file = "temp_media" + temp_ext
         
-        res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True)
-        if res_download.status_code == 200:
-            with open(temp_file, "wb") as mf:
-                for chunk in res_download.iter_content(chunk_size=8192):
-                    mf.write(chunk)
-            print(f"Downloaded video successfully, size: {os.path.getsize(temp_file)} bytes")
-        else:
-            print(f"Failed to download video, status code: {res_download.status_code}")
-            return None
-            
-        return {
-            "type": "catbox",
-            "local_path": temp_file,
-            "media_url": chosen_url,
-            "is_video": is_video,
-            "original_path": None
-        }
+        # Loop through URLs, skip dead/404 ones
+        for chosen_url in available_urls:
+            print(f"Selected Catbox URL: {chosen_url}")
+            try:
+                res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=30)
+                if res_download.status_code == 200:
+                    with open(temp_file, "wb") as mf:
+                        for chunk in res_download.iter_content(chunk_size=8192):
+                            mf.write(chunk)
+                    file_size = os.path.getsize(temp_file)
+                    if file_size > 1024:  # Must be at least 1KB
+                        print(f"Downloaded successfully, size: {file_size} bytes")
+                        return {
+                            "type": "catbox",
+                            "local_path": temp_file,
+                            "media_url": chosen_url,
+                            "is_video": is_video,
+                            "original_path": None
+                        }
+                    else:
+                        print(f"Downloaded file too small ({file_size} bytes), skipping: {chosen_url}")
+                else:
+                    print(f"URL returned {res_download.status_code}, skipping: {chosen_url}")
+                # Mark dead URL as used so we skip it next time too
+                with open("used_urls.txt", "a") as uf:
+                    uf.write(chosen_url + "\n")
+                # Remove from urls file
+                if os.path.exists(filename):
+                    with open(filename, "r") as f:
+                        remaining = [l.strip() for l in f if l.strip() and l.strip() != chosen_url]
+                    with open(filename, "w") as f:
+                        f.write("\n".join(remaining))
+            except Exception as e:
+                print(f"Error downloading {chosen_url}: {e}, skipping.")
+        
+        print("All available URLs are dead/invalid.")
+        return None
 
     def get_image_from_github_folder():
         import random
@@ -523,6 +540,9 @@ if __name__ == "__main__":
                 git_commit_and_push("Cleaned up old posted media")
         
         media_info = get_next_media()
+        if not media_info:
+            print("No media available to post. Please add more URLs to reels_urls.txt or images to the images folder.")
+            exit(0)
         print(f"Media URL for Graph API: {media_info['media_url']}")
         
         caption = generate_caption(media_info["local_path"])
