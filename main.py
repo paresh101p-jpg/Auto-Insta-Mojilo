@@ -26,7 +26,7 @@ if FB_PAGE_ID == "YAHAN_APNA_NAYA_PAGE_ID_DALNA_HAI":
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro"]
+GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash-latest"]
 # Yahan naye repo ka naam aayega (e.g., Auto-Insta-Mojilo)
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/main/"
 
@@ -149,14 +149,29 @@ def get_next_media():
             os.rename(chosen_local_path, new_path)
             git_commit_and_push(f"Moved to posted: {f}")
             
-            clean_path = new_path.replace("\\", "/")
-            encoded_path = "/".join([urllib.parse.quote(p) for p in clean_path.split("/")])
-            media_url = f"{GITHUB_REPO_RAW_URL}{encoded_path}"
+            # Upload to Catbox so Instagram/Facebook can access the URL
+            # raw.githubusercontent.com URLs are NOT accepted by Instagram Graph API
+            print(f"Uploading image to Catbox for public URL...")
+            catbox_url = None
+            try:
+                with open(new_path, 'rb') as img_f:
+                    cat_res = requests.post('https://catbox.moe/user/api.php',
+                        data={'reqtype': 'fileupload'},
+                        files={'fileToUpload': img_f})
+                if cat_res.status_code == 200 and cat_res.text.strip().startswith('https://'):
+                    catbox_url = cat_res.text.strip()
+                    print(f"Catbox URL for image: {catbox_url}")
+            except Exception as ce:
+                print(f"Catbox image upload failed: {ce}")
+            
+            if not catbox_url:
+                print("Could not get Catbox URL for image, skipping this image.")
+                continue
             
             return {
                 "type": "local",
                 "local_path": new_path,
-                "media_url": media_url,
+                "media_url": catbox_url,
                 "is_video": False,
                 "original_path": chosen_local_path
             }
