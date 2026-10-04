@@ -26,7 +26,7 @@ if FB_PAGE_ID == "YAHAN_APNA_NAYA_PAGE_ID_DALNA_HAI":
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.8-flash-001"]
+GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro"]
 # Yahan naye repo ka naam aayega (e.g., Auto-Insta-Mojilo)
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/main/"
 
@@ -103,9 +103,15 @@ def get_next_media():
         temp_ext = ".mp4" if is_video else ".jpg"
         temp_file = "temp_media" + temp_ext
         
-        res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with open(temp_file, "wb") as mf:
-            mf.write(res_download.content)
+        res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True)
+        if res_download.status_code == 200:
+            with open(temp_file, "wb") as mf:
+                for chunk in res_download.iter_content(chunk_size=8192):
+                    mf.write(chunk)
+            print(f"Downloaded video successfully, size: {os.path.getsize(temp_file)} bytes")
+        else:
+            print(f"Failed to download video, status code: {res_download.status_code}")
+            return None
             
         return {
             "type": "catbox",
@@ -235,7 +241,7 @@ Do not include any extra text outside the caption itself."""
                 
     try:
         import fallback_captions
-        return fallback_captions.get_random_caption()
+        return fallback_captions.get_random_fallback_caption()
     except Exception as e:
         print(f"Fallback captions failed too: {e}")
         return """DM us for Custom T-Shirt Printing and DTF Stickers in Surat! 👇🔥
