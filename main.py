@@ -185,42 +185,12 @@ def get_next_media():
             os.rename(chosen_local_path, new_path)
             git_commit_and_push(f"Moved to posted: {f}")
             
-            # Upload to tmpfiles.org so Instagram/Facebook can access the URL
-            print(f"Uploading image to public URL (tmpfiles.org)...")
-            public_url = None
-            for attempt in range(1, 4):
-                try:
-                    print(f"Upload attempt {attempt}...")
-                    with open(new_path, 'rb') as img_f:
-                        res = requests.post('https://tmpfiles.org/api/v1/upload',
-                            files={'file': img_f},
-                            timeout=90)
-                    if res.status_code == 200:
-                        data = res.json()
-                        if data.get('status') == 'success':
-                            public_url = data['data']['url'].replace('tmpfiles.org/', 'tmpfiles.org/dl/')
-                            print(f"Public URL for image: {public_url}")
-                            break
-                    print(f"Upload attempt {attempt} failed: status={res.status_code}, response={res.text[:100]}")
-                except Exception as ce:
-                    print(f"Upload attempt {attempt} failed: {ce}")
-                if attempt < 3:
-                    time.sleep(5)
-            
-            if not public_url:
-                print("Could not get public URL for image after 3 attempts, skipping this image.")
-                # Rollback: move image back to images folder
-                try:
-                    os.rename(new_path, chosen_local_path)
-                    base_name_rb = os.path.splitext(f)[0]
-                    history_rb = load_history()
-                    if base_name_rb in history_rb:
-                        del history_rb[base_name_rb]
-                        save_history(history_rb)
-                    print("Rolled back image to images folder.")
-                except Exception as re:
-                    print(f"Rollback failed: {re}")
-                continue
+            # Use JSDelivr CDN which maps directly to your public GitHub repo
+            # This completely bypasses the need for Catbox/Tmpfiles and Instagram accepts it!
+            clean_path = new_path.replace("\\", "/")
+            encoded_path = "/".join([urllib.parse.quote(p) for p in clean_path.split("/")])
+            public_url = f"https://cdn.jsdelivr.net/gh/paresh101p-jpg/Auto-Insta-Mojilo@main/{encoded_path}"
+            print(f"Public URL for image via JSDelivr: {public_url}")
             
             return {
                 "type": "public_url",
@@ -568,29 +538,7 @@ def create_story_image(local_path):
         return local_path
 
 def upload_to_tmpfiles(file_path):
-    """Upload a file to tmpfiles.org with retries. Returns URL or None."""
-    for attempt in range(1, 4):
-        try:
-            print(f"Uploading {file_path} to tmpfiles.org (attempt {attempt})...")
-            with open(file_path, 'rb') as f:
-                response = requests.post(
-                    'https://tmpfiles.org/api/v1/upload',
-                    files={'file': f},
-                    timeout=90
-                )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('status') == 'success':
-                    url = data['data']['url'].replace('tmpfiles.org/', 'tmpfiles.org/dl/')
-                    print(f"✅ Upload success: {url}")
-                    return url
-            print(f"Upload attempt {attempt} failed: {response.status_code} - {response.text[:100]}")
-        except Exception as e:
-            print(f"Upload attempt {attempt} exception: {e}")
-        if attempt < 3:
-            time.sleep(5)
-    print("❌ Upload failed after 3 attempts.")
-    return None
+    pass # Deprecated in favor of JSDelivr CDN
 
 def retry_post(func, *args, **kwargs):
     for attempt in range(1, 4):
@@ -639,12 +587,11 @@ if __name__ == "__main__":
             try:
                 story_local = create_story_image(media_info["local_path"])
                 if story_local != media_info["local_path"]:
-                    public_url = upload_to_tmpfiles(story_local)
-                    if public_url:
-                        story_url = public_url
-                        print(f"Using public URL for story: {story_url}")
-                    else:
-                        print("Story upload failed, using original image URL for story.")
+                    git_commit_and_push("Update story_temp.jpg for CDN access")
+                    clean_story_path = story_local.replace("\\", "/")
+                    encoded_story = "/".join([urllib.parse.quote(p) for p in clean_story_path.split("/")])
+                    story_url = f"https://cdn.jsdelivr.net/gh/paresh101p-jpg/Auto-Insta-Mojilo@main/{encoded_story}"
+                    print(f"Using public CDN URL for story: {story_url}")
             except Exception as story_err:
                 print(f"Warning: Story image creation failed (non-fatal): {story_err}")
 
