@@ -249,28 +249,19 @@ def get_next_media():
         return res
 
     if next_type == "IMAGE":
-        print("Trying IMAGE first...")
+        print("Trying to post IMAGE...")
         res = try_image()
         if res:
             return res
-        # Fallback to REEL
-        print("IMAGE not available or failed. Falling back to REEL...")
-        res = try_reel()
-        if res:
-            return res
+        print("❌ IMAGE not available or failed. (Strict mode: NOT falling back to REEL)")
+        return None
     else:
-        print("Trying REEL first...")
+        print("Trying to post REEL...")
         res = try_reel()
         if res:
             return res
-        # Fallback to IMAGE
-        print("REEL not available or failed. Falling back to IMAGE...")
-        res = try_image()
-        if res:
-            return res
-
-    print("Could not find any media to post (both IMAGE and REEL failed).")
-    return None
+        print("❌ REEL not available or failed. (Strict mode: NOT falling back to IMAGE)")
+        return None
 
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
