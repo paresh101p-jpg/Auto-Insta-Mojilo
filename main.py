@@ -357,53 +357,21 @@ def post_fb_video(caption, local_file):
 
 
 
-def post_fb_video_story(local_file):
-    print("Posting to Facebook Story (Video)...")
+def post_fb_video_story(video_url):
+    print("Posting to Facebook Story (Video) via direct URL...")
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/video_stories"
     
     try:
-        import os
-        file_size = os.path.getsize(local_file)
-        
-        # Step 1: Start
-        start_payload = {
-            'upload_phase': 'start',
-            'access_token': FB_ACCESS_TOKEN,
-            'file_size': file_size
+        payload = {
+            'video_url': video_url,
+            'access_token': FB_ACCESS_TOKEN
         }
-        res_start = requests.post(url, data=start_payload).json()
-        if 'video_id' not in res_start:
-            print(f"❌ FB Video Story Start Failed: {res_start}")
-            return False
-            
-        video_id = res_start['video_id']
-        upload_url = res_start['upload_url']
-        
-        # Step 2: Upload
-        with open(local_file, "rb") as vf:
-            files = {'video_file_chunk': (local_file, vf, 'video/mp4')}
-            upload_payload = {
-                'access_token': FB_ACCESS_TOKEN,
-                'upload_phase': 'transfer',
-                'start_offset': '0',
-                'video_id': video_id
-            }
-            headers = {'Authorization': f'OAuth {FB_ACCESS_TOKEN}'}
-            res_up = requests.post(upload_url, headers=headers, data=upload_payload, files=files).json()
-            # Some FB APIs return success in a weird format, let's just proceed
-            
-        # Step 3: Finish
-        finish_payload = {
-            'upload_phase': 'finish',
-            'access_token': FB_ACCESS_TOKEN,
-            'video_id': video_id
-        }
-        res_finish = requests.post(url, data=finish_payload).json()
-        if res_finish.get('success'):
-            print(f"✅ FB Video Story Success (ID: {video_id})")
+        res = requests.post(url, data=payload).json()
+        if res.get('success') or 'post_id' in res or 'id' in res:
+            print(f"✅ FB Video Story Success: {res}")
             return True
         else:
-            print(f"❌ FB Video Story Finish Failed: {res_finish}")
+            print(f"❌ FB Video Story Failed: {res}")
             return False
     except Exception as e:
         print(f"❌ Error uploading FB Video Story: {e}")
@@ -605,7 +573,7 @@ if __name__ == "__main__":
         if media_info["is_video"]:
             if retry_post(post_fb_video, caption, media_info["local_path"]):
                 success = True
-            retry_post(post_fb_video_story, media_info["local_path"])
+            retry_post(post_fb_video_story, media_info["media_url"])
         else:
             if retry_post(post_fb_feed, caption, media_info["media_url"]):
                 success = True
