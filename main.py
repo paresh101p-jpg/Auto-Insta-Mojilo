@@ -185,33 +185,30 @@ def get_next_media():
             os.rename(chosen_local_path, new_path)
             git_commit_and_push(f"Moved to posted: {f}")
             
-            # Upload to Catbox so Instagram/Facebook can access the URL
-            # raw.githubusercontent.com URLs are NOT accepted by Instagram Graph API
-            print(f"Uploading image to Catbox for public URL...")
-            catbox_url = None
-            # Retry Catbox upload up to 3 times
+            # Upload to tmpfiles.org so Instagram/Facebook can access the URL
+            print(f"Uploading image to public URL (tmpfiles.org)...")
+            public_url = None
             for attempt in range(1, 4):
                 try:
-                    print(f"Catbox upload attempt {attempt}...")
+                    print(f"Upload attempt {attempt}...")
                     with open(new_path, 'rb') as img_f:
-                        cat_res = requests.post('https://catbox.moe/user/api.php',
-                            data={'reqtype': 'fileupload'},
-                            files={'fileToUpload': img_f},
-                            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                        res = requests.post('https://tmpfiles.org/api/v1/upload',
+                            files={'file': img_f},
                             timeout=90)
-                    if cat_res.status_code == 200 and cat_res.text.strip().startswith('https://'):
-                        catbox_url = cat_res.text.strip()
-                        print(f"Catbox URL for image: {catbox_url}")
-                        break
-                    else:
-                        print(f"Catbox attempt {attempt} failed: status={cat_res.status_code}, response={cat_res.text[:100]}")
+                    if res.status_code == 200:
+                        data = res.json()
+                        if data.get('status') == 'success':
+                            public_url = data['data']['url'].replace('tmpfiles.org/', 'tmpfiles.org/dl/')
+                            print(f"Public URL for image: {public_url}")
+                            break
+                    print(f"Upload attempt {attempt} failed: status={res.status_code}, response={res.text[:100]}")
                 except Exception as ce:
-                    print(f"Catbox image upload attempt {attempt} failed: {ce}")
+                    print(f"Upload attempt {attempt} failed: {ce}")
                 if attempt < 3:
                     time.sleep(5)
             
-            if not catbox_url:
-                print("Could not get Catbox URL for image after 3 attempts, skipping this image.")
+            if not public_url:
+                print("Could not get public URL for image after 3 attempts, skipping this image.")
                 # Rollback: move image back to images folder
                 try:
                     os.rename(new_path, chosen_local_path)
@@ -226,9 +223,9 @@ def get_next_media():
                 continue
             
             return {
-                "type": "local",
+                "type": "public_url",
                 "local_path": new_path,
-                "media_url": catbox_url,
+                "media_url": public_url,
                 "is_video": False,
                 "original_path": chosen_local_path
             }
@@ -570,29 +567,29 @@ def create_story_image(local_path):
         print(f"Error creating story image: {e}")
         return local_path
 
-def upload_to_catbox(file_path):
-    """Upload a file to Catbox with retries. Returns URL or None."""
+def upload_to_tmpfiles(file_path):
+    """Upload a file to tmpfiles.org with retries. Returns URL or None."""
     for attempt in range(1, 4):
         try:
-            print(f"Uploading {file_path} to Catbox (attempt {attempt})...")
+            print(f"Uploading {file_path} to tmpfiles.org (attempt {attempt})...")
             with open(file_path, 'rb') as f:
                 response = requests.post(
-                    'https://catbox.moe/user/api.php',
-                    data={'reqtype': 'fileupload'},
-                    files={'fileToUpload': f},
-                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                    'https://tmpfiles.org/api/v1/upload',
+                    files={'file': f},
                     timeout=90
                 )
-            if response.status_code == 200 and response.text.strip().startswith('https://'):
-                print(f"✅ Catbox upload success: {response.text.strip()}")
-                return response.text.strip()
-            else:
-                print(f"Catbox attempt {attempt} failed: {response.status_code} - {response.text[:100]}")
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'success':
+                    url = data['data']['url'].replace('tmpfiles.org/', 'tmpfiles.org/dl/')
+                    print(f"✅ Upload success: {url}")
+                    return url
+            print(f"Upload attempt {attempt} failed: {response.status_code} - {response.text[:100]}")
         except Exception as e:
-            print(f"Catbox upload attempt {attempt} exception: {e}")
+            print(f"Upload attempt {attempt} exception: {e}")
         if attempt < 3:
             time.sleep(5)
-    print("❌ Catbox upload failed after 3 attempts.")
+    print("❌ Upload failed after 3 attempts.")
     return None
 
 def retry_post(func, *args, **kwargs):
@@ -642,12 +639,12 @@ if __name__ == "__main__":
             try:
                 story_local = create_story_image(media_info["local_path"])
                 if story_local != media_info["local_path"]:
-                    catbox_url = upload_to_catbox(story_local)
-                    if catbox_url:
-                        story_url = catbox_url
-                        print(f"Using Catbox URL for story: {story_url}")
+                    public_url = upload_to_tmpfiles(story_local)
+                    if public_url:
+                        story_url = public_url
+                        print(f"Using public URL for story: {story_url}")
                     else:
-                        print("Story Catbox upload failed, using original image URL for story.")
+                        print("Story upload failed, using original image URL for story.")
             except Exception as story_err:
                 print(f"Warning: Story image creation failed (non-fatal): {story_err}")
 
