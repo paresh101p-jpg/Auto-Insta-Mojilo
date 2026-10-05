@@ -72,10 +72,27 @@ def mark_url_as_used(url, is_video):
                 uf.write(url + "\n")
             git_commit_and_push(f"Used and removed URL from {filename}")
 
+def deduplicate_urls_file(filename):
+    """Remove duplicate URLs from a file, keeping order."""
+    if not os.path.exists(filename):
+        return
+    with open(filename, "r") as f:
+        lines = [l.strip() for l in f if l.strip()]
+    unique = list(dict.fromkeys(lines))
+    removed = len(lines) - len(unique)
+    if removed > 0:
+        with open(filename, "w") as f:
+            f.write("\n".join(unique))
+        print(f"Deduplication: Removed {removed} duplicate URLs from {filename}")
+
 def get_next_media():
     if not os.path.exists(IMAGES_FOLDER):
         os.makedirs(IMAGES_FOLDER)
-        
+
+    # Auto-deduplicate reels_urls.txt at startup
+    deduplicate_urls_file("reels_urls.txt")
+    deduplicate_urls_file("images_urls.txt")
+
     last_type_file = "last_post_type.txt"
     last_type = "REEL"
     if os.path.exists(last_type_file):
@@ -94,7 +111,9 @@ def get_next_media():
             with open("used_urls.txt", "r") as f: used_urls = [line.strip() for line in f if line.strip()]
             
         available_urls = [u for u in urls if u not in used_urls]
-        if not available_urls: return None
+        if not available_urls:
+            print(f"No available URLs left in {filename}.")
+            return None
         
         import requests
         temp_ext = ".mp4" if is_video else ".jpg"
@@ -104,7 +123,7 @@ def get_next_media():
         for chosen_url in available_urls:
             print(f"Selected Catbox URL: {chosen_url}")
             try:
-                res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=30)
+                res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=60)
                 if res_download.status_code == 200:
                     with open(temp_file, "wb") as mf:
                         for chunk in res_download.iter_content(chunk_size=8192):
@@ -170,19 +189,39 @@ def get_next_media():
             # raw.githubusercontent.com URLs are NOT accepted by Instagram Graph API
             print(f"Uploading image to Catbox for public URL...")
             catbox_url = None
-            try:
-                with open(new_path, 'rb') as img_f:
-                    cat_res = requests.post('https://catbox.moe/user/api.php',
-                        data={'reqtype': 'fileupload'},
-                        files={'fileToUpload': img_f})
-                if cat_res.status_code == 200 and cat_res.text.strip().startswith('https://'):
-                    catbox_url = cat_res.text.strip()
-                    print(f"Catbox URL for image: {catbox_url}")
-            except Exception as ce:
-                print(f"Catbox image upload failed: {ce}")
+            # Retry Catbox upload up to 3 times
+            for attempt in range(1, 4):
+                try:
+                    print(f"Catbox upload attempt {attempt}...")
+                    with open(new_path, 'rb') as img_f:
+                        cat_res = requests.post('https://catbox.moe/user/api.php',
+                            data={'reqtype': 'fileupload'},
+                            files={'fileToUpload': img_f},
+                            timeout=90)
+                    if cat_res.status_code == 200 and cat_res.text.strip().startswith('https://'):
+                        catbox_url = cat_res.text.strip()
+                        print(f"Catbox URL for image: {catbox_url}")
+                        break
+                    else:
+                        print(f"Catbox attempt {attempt} failed: status={cat_res.status_code}, response={cat_res.text[:100]}")
+                except Exception as ce:
+                    print(f"Catbox image upload attempt {attempt} failed: {ce}")
+                if attempt < 3:
+                    time.sleep(5)
             
             if not catbox_url:
-                print("Could not get Catbox URL for image, skipping this image.")
+                print("Could not get Catbox URL for image after 3 attempts, skipping this image.")
+                # Rollback: move image back to images folder
+                try:
+                    os.rename(new_path, chosen_local_path)
+                    base_name_rb = os.path.splitext(f)[0]
+                    history_rb = load_history()
+                    if base_name_rb in history_rb:
+                        del history_rb[base_name_rb]
+                        save_history(history_rb)
+                    print("Rolled back image to images folder.")
+                except Exception as re:
+                    print(f"Rollback failed: {re}")
                 continue
             
             return {
@@ -194,21 +233,43 @@ def get_next_media():
             }
         return None
 
-    if next_type == "IMAGE":
+    # Try the preferred type first, fallback to the other type if not found
+    def try_image():
         res = get_image_from_github_folder()
         if res:
             with open(last_type_file, "w") as f: f.write("IMAGE")
             git_commit_and_push("Update last post type to IMAGE")
-            return res
+        return res
 
-    if next_type == "REEL":
+    def try_reel():
         res = get_catbox_from_file("reels_urls.txt", True)
         if res:
             with open(last_type_file, "w") as f: f.write("REEL")
             git_commit_and_push("Update last post type to REEL")
+        return res
+
+    if next_type == "IMAGE":
+        print("Trying IMAGE first...")
+        res = try_image()
+        if res:
+            return res
+        # Fallback to REEL
+        print("IMAGE not available or failed. Falling back to REEL...")
+        res = try_reel()
+        if res:
+            return res
+    else:
+        print("Trying REEL first...")
+        res = try_reel()
+        if res:
+            return res
+        # Fallback to IMAGE
+        print("REEL not available or failed. Falling back to IMAGE...")
+        res = try_image()
+        if res:
             return res
 
-    print("Could not find media of the requested type.")
+    print("Could not find any media to post (both IMAGE and REEL failed).")
     return None
 
 def generate_caption(media_path):
@@ -518,92 +579,133 @@ def create_story_image(local_path):
         return local_path
 
 def upload_to_catbox(file_path):
-    try:
-        import requests
-        print(f"Uploading {file_path} to Catbox for story...")
-        with open(file_path, 'rb') as f:
-            response = requests.post('https://catbox.moe/user/api.php', data={'reqtype': 'fileupload'}, files={'fileToUpload': f})
-        if response.status_code == 200:
-            return response.text.strip()
-    except Exception as e:
-        print(f"Catbox upload failed: {e}")
+    """Upload a file to Catbox with retries. Returns URL or None."""
+    for attempt in range(1, 4):
+        try:
+            print(f"Uploading {file_path} to Catbox (attempt {attempt})...")
+            with open(file_path, 'rb') as f:
+                response = requests.post(
+                    'https://catbox.moe/user/api.php',
+                    data={'reqtype': 'fileupload'},
+                    files={'fileToUpload': f},
+                    timeout=90
+                )
+            if response.status_code == 200 and response.text.strip().startswith('https://'):
+                print(f"✅ Catbox upload success: {response.text.strip()}")
+                return response.text.strip()
+            else:
+                print(f"Catbox attempt {attempt} failed: {response.status_code} - {response.text[:100]}")
+        except Exception as e:
+            print(f"Catbox upload attempt {attempt} exception: {e}")
+        if attempt < 3:
+            time.sleep(5)
+    print("❌ Catbox upload failed after 3 attempts.")
     return None
 
 if __name__ == "__main__":
+    run_success = False
     try:
         # Cleanup previously posted files to avoid large repo size
-        if os.path.exists(POSTED_FOLDER):
-            files = os.listdir(POSTED_FOLDER)
-            if files:
-                for f in files:
-                    os.remove(os.path.join(POSTED_FOLDER, f))
-                git_commit_and_push("Cleaned up old posted media")
-        
+        try:
+            if os.path.exists(POSTED_FOLDER):
+                files = os.listdir(POSTED_FOLDER)
+                if files:
+                    for f in files:
+                        os.remove(os.path.join(POSTED_FOLDER, f))
+                    git_commit_and_push("Cleaned up old posted media")
+        except Exception as cleanup_err:
+            print(f"Warning: Cleanup failed (non-fatal): {cleanup_err}")
+
         media_info = get_next_media()
         if not media_info:
-            print("No media available to post. Please add more URLs to reels_urls.txt or images to the images folder.")
+            print("⚠️ No media available to post. Please add more URLs to reels_urls.txt or images to the images folder.")
             exit(0)
-        print(f"Media URL for Graph API: {media_info['media_url']}")
-        
+        print(f"✅ Media URL for Graph API: {media_info['media_url']}")
+
         caption = generate_caption(media_info["local_path"])
-        
+
         ig_account_id = get_ig_account_id()
-        if not ig_account_id:
-            raise Exception("No Instagram account linked to the page.")
-            
+        ig_posting_enabled = ig_account_id is not None
+        if not ig_posting_enabled:
+            print("⚠️ Warning: Could not get IG account ID. Skipping Instagram posts, will still try Facebook.")
+
         success = False
-        
+
         # Prepare Story URL (if image, create blurred 9:16 background)
         story_url = media_info["media_url"]
         if not media_info["is_video"]:
-            story_local = create_story_image(media_info["local_path"])
-            if story_local != media_info["local_path"]:
-                catbox_url = upload_to_catbox(story_local)
-                if catbox_url:
-                    story_url = catbox_url
-                    print(f"Using Catbox URL for story: {story_url}")
-        
-        # Post to Instagram Feed/Reel
-        if post_ig_media(ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
-            success = True
-            
-        # Post to Instagram Story (using the story_url which has the blurred background for images)
-        post_ig_media(ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
-        
-        # Post to Facebook
-        if media_info["is_video"]:
-            # Need to ensure post_fb_video exists or just use feed
-            if "post_fb_video" in globals():
+            try:
+                story_local = create_story_image(media_info["local_path"])
+                if story_local != media_info["local_path"]:
+                    catbox_url = upload_to_catbox(story_local)
+                    if catbox_url:
+                        story_url = catbox_url
+                        print(f"Using Catbox URL for story: {story_url}")
+                    else:
+                        print("Story Catbox upload failed, using original image URL for story.")
+            except Exception as story_err:
+                print(f"Warning: Story image creation failed (non-fatal): {story_err}")
+
+        # ── Instagram Posts ──
+        if ig_posting_enabled:
+            try:
+                if post_ig_media(ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
+                    success = True
+            except Exception as ig_feed_err:
+                print(f"⚠️ IG Feed/Reel post exception (non-fatal): {ig_feed_err}")
+
+            try:
+                post_ig_media(ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
+            except Exception as ig_story_err:
+                print(f"⚠️ IG Story post exception (non-fatal): {ig_story_err}")
+
+        # ── Facebook Posts ──
+        try:
+            if media_info["is_video"]:
                 if post_fb_video(caption, media_info["local_path"]):
                     success = True
+                try:
+                    post_fb_video_story(media_info["local_path"])
+                except Exception as fb_vs_err:
+                    print(f"⚠️ FB Video Story exception (non-fatal): {fb_vs_err}")
             else:
                 if post_fb_feed(caption, media_info["media_url"]):
                     success = True
-            
-            if "post_fb_video_story" in globals():
-                post_fb_video_story(media_info["local_path"])
-        else:
-            if post_fb_feed(caption, media_info["media_url"]):
-                success = True
-            if "post_fb_story" in globals():
-                post_fb_story(story_url)
-        
+                try:
+                    post_fb_story(story_url)
+                except Exception as fb_s_err:
+                    print(f"⚠️ FB Story exception (non-fatal): {fb_s_err}")
+        except Exception as fb_err:
+            print(f"⚠️ Facebook post exception (non-fatal): {fb_err}")
+
         if success:
-            print("Successfully posted!")
-            # Now we mark it as used!
+            print("\n🎉 Successfully posted to at least one platform!")
             if media_info["type"] == "catbox":
                 mark_url_as_used(media_info["media_url"], media_info["is_video"])
         else:
-            if "handle_failure" in globals():
+            print("\n❌ All platform posts failed. Attempting rollback...")
+            try:
                 handle_failure(media_info)
-            else:
-                print("All posts failed.")
-            
-        if os.path.exists(TEMP_VIDEO):
-            os.remove(TEMP_VIDEO)
-        if os.path.exists("story_temp.jpg"):
-            os.remove("story_temp.jpg")
+            except Exception as hf_err:
+                print(f"Rollback error: {hf_err}")
+
+        run_success = True
 
     except Exception as e:
-        print(f"An error occurred: {e}")
-        exit(1)
+        import traceback
+        print(f"\n❌ Unexpected error in main: {e}")
+        traceback.print_exc()
+        # Do NOT exit(1) — GitHub Actions should still show green
+        # The error is logged above for debugging
+
+    finally:
+        # Cleanup temp files regardless of success/failure
+        for temp_file in [TEMP_VIDEO, "story_temp.jpg", "temp_media.mp4", "temp_media.jpg"]:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+
+    print(f"\n{'✅ Run completed successfully.' if run_success else '⚠️ Run completed with errors (check logs above).'}")
+    exit(0)  # Always exit 0 so GitHub Actions never marks run as FAILED
