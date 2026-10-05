@@ -197,6 +197,7 @@ def get_next_media():
                         cat_res = requests.post('https://catbox.moe/user/api.php',
                             data={'reqtype': 'fileupload'},
                             files={'fileToUpload': img_f},
+                            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
                             timeout=90)
                     if cat_res.status_code == 200 and cat_res.text.strip().startswith('https://'):
                         catbox_url = cat_res.text.strip()
@@ -579,6 +580,7 @@ def upload_to_catbox(file_path):
                     'https://catbox.moe/user/api.php',
                     data={'reqtype': 'fileupload'},
                     files={'fileToUpload': f},
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
                     timeout=90
                 )
             if response.status_code == 200 and response.text.strip().startswith('https://'):
