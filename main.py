@@ -593,6 +593,18 @@ def upload_to_catbox(file_path):
     print("❌ Catbox upload failed after 3 attempts.")
     return None
 
+def retry_post(func, *args, **kwargs):
+    for attempt in range(1, 4):
+        try:
+            if func(*args, **kwargs):
+                return True
+        except Exception as e:
+            print(f"⚠️ Exception in attempt {attempt}: {e}")
+        if attempt < 3:
+            print(f"Retrying in 10 seconds (Attempt {attempt+1}/3)...")
+            time.sleep(10)
+    return False
+
 if __name__ == "__main__":
     run_success = False
     try:
@@ -639,35 +651,19 @@ if __name__ == "__main__":
 
         # ── Instagram Posts ──
         if ig_posting_enabled:
-            try:
-                if post_ig_media(ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
-                    success = True
-            except Exception as ig_feed_err:
-                print(f"⚠️ IG Feed/Reel post exception (non-fatal): {ig_feed_err}")
-
-            try:
-                post_ig_media(ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
-            except Exception as ig_story_err:
-                print(f"⚠️ IG Story post exception (non-fatal): {ig_story_err}")
+            if retry_post(post_ig_media, ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
+                success = True
+            retry_post(post_ig_media, ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
 
         # ── Facebook Posts ──
-        try:
-            if media_info["is_video"]:
-                if post_fb_video(caption, media_info["local_path"]):
-                    success = True
-                try:
-                    post_fb_video_story(media_info["local_path"])
-                except Exception as fb_vs_err:
-                    print(f"⚠️ FB Video Story exception (non-fatal): {fb_vs_err}")
-            else:
-                if post_fb_feed(caption, media_info["media_url"]):
-                    success = True
-                try:
-                    post_fb_story(story_url)
-                except Exception as fb_s_err:
-                    print(f"⚠️ FB Story exception (non-fatal): {fb_s_err}")
-        except Exception as fb_err:
-            print(f"⚠️ Facebook post exception (non-fatal): {fb_err}")
+        if media_info["is_video"]:
+            if retry_post(post_fb_video, caption, media_info["local_path"]):
+                success = True
+            retry_post(post_fb_video_story, media_info["local_path"])
+        else:
+            if retry_post(post_fb_feed, caption, media_info["media_url"]):
+                success = True
+            retry_post(post_fb_story, story_url)
 
         if success:
             print("\n🎉 Successfully posted to at least one platform!")
