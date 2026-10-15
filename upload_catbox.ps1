@@ -1,5 +1,6 @@
 $videoDir = "new_video"
 $outputFile = "reels_urls.txt"
+$backupFile = "reels_urls_backup.txt"
 
 if (-not (Test-Path $videoDir)) {
     Write-Host "Folder '$videoDir' not found!"
@@ -31,6 +32,7 @@ foreach ($file in $mp4Files) {
         if ($url -match "^https://") {
             Write-Host "Success! URL: $url"
             Add-Content -Path $outputFile -Value $url
+            Add-Content -Path $backupFile -Value $url
             $uploadedCount++
             
             # Delete local file to free space
@@ -47,4 +49,5 @@ foreach ($file in $mp4Files) {
 }
 
 Write-Host "`nUpload complete! Successfully uploaded $uploadedCount reels."
-Write-Host "The URLs are saved in $outputFile. You can now push this file to GitHub!"
+Write-Host "The URLs are saved in $outputFile and Master Backup in $backupFile. You can now push this file to GitHub!"
+
