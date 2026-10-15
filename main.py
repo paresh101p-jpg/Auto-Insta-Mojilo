@@ -112,8 +112,33 @@ def get_next_media():
             
         available_urls = [u for u in urls if u not in used_urls]
         if not available_urls:
-            print(f"No available URLs left in {filename}.")
-            return None
+            backup_file = "reels_urls_backup.txt" if is_video else "images_urls_backup.txt"
+            if os.path.exists(backup_file):
+                print(f"⚠️ No available URLs left in {filename}! Auto-Recycling from {backup_file}...")
+                with open(backup_file, "r", encoding="utf-8", errors="ignore") as f:
+                    backup_urls = [line.strip() for line in f if line.strip()]
+                if backup_urls:
+                    unique_urls = list(dict.fromkeys(backup_urls))
+                    import random
+                    random.shuffle(unique_urls)
+                    with open(filename, "w", encoding="utf-8") as f:
+                        f.write("\n".join(unique_urls) + "\n")
+                    # Archive used_urls.txt to cycle archive and clear it for fresh cycle
+                    if os.path.exists("used_urls.txt"):
+                        try:
+                            with open("used_urls_cycle_archive.txt", "a", encoding="utf-8") as af:
+                                with open("used_urls.txt", "r", encoding="utf-8", errors="ignore") as uf:
+                                    af.write(uf.read())
+                            with open("used_urls.txt", "w", encoding="utf-8") as uf:
+                                uf.write("")
+                            print("✅ Archived and reset used_urls.txt for new cycle in Mojilo.")
+                        except Exception as ex:
+                            print(f"Notice: used_urls archive: {ex}")
+                    git_commit_and_push(f"Auto-Recycle: Reloaded {len(unique_urls)} URLs from {backup_file} into {filename}")
+                    available_urls = unique_urls
+            if not available_urls:
+                print(f"No available URLs left in {filename}.")
+                return None
         
         import requests
         temp_ext = ".mp4" if is_video else ".jpg"
