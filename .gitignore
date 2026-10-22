@@ -3,3 +3,7 @@ fb_permanent_token.txt
 generate_fb_token.py
 
 new_video/
+mojilo_firebase_key.json
+amazon_catbox_cache.json
+__pycache__/
+*.pyc

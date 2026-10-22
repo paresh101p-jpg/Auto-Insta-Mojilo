@@ -26,7 +26,7 @@ if FB_PAGE_ID == "YAHAN_APNA_NAYA_PAGE_ID_DALNA_HAI":
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.8-flash-001"]
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.8-pro", "gemini-3.7-flash"]
 # Yahan naye repo ka naam aayega (e.g., Auto-Insta-Mojilo)
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/main/"
 
@@ -50,12 +50,17 @@ def save_history(history):
 
 def git_commit_and_push(commit_message):
     try:
-        subprocess.run(["git", "config", "user.email", "actions@github.com"], check=True)
-        subprocess.run(["git", "config", "user.name", "Auto Insta Bot"], check=True)
-        subprocess.run(["git", "add", "-A"], check=True)
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
-        subprocess.run(["git", "push"], check=True)
-        print(f"Git Push Success: {commit_message}")
+        subprocess.run(["git", "config", "user.email", "actions@github.com"], check=False)
+        subprocess.run(["git", "config", "user.name", "Auto Insta Bot"], check=False)
+        subprocess.run(["git", "add", "-A"], check=False)
+        subprocess.run(["git", "commit", "-m", commit_message], check=False)
+        for _ in range(3):
+            subprocess.run(["git", "pull", "--rebase", "origin", "main"], check=False)
+            res = subprocess.run(["git", "push"], check=False)
+            if res.returncode == 0:
+                print(f"Git Push Success: {commit_message}")
+                return
+            time.sleep(2)
     except Exception as e:
         print(f"Git push warning: {e}")
 
@@ -104,11 +109,11 @@ def get_next_media():
 
     def get_catbox_from_file(filename, is_video):
         if not os.path.exists(filename): return None
-        with open(filename, "r") as f: urls = [line.strip() for line in f if line.strip()]
+        with open(filename, "r", encoding="utf-8", errors="ignore") as f: urls = [line.strip() for line in f if line.strip()]
         
         used_urls = []
         if os.path.exists("used_urls.txt"):
-            with open("used_urls.txt", "r") as f: used_urls = [line.strip() for line in f if line.strip()]
+            with open("used_urls.txt", "r", encoding="utf-8", errors="ignore") as f: used_urls = [line.strip() for line in f if line.strip()]
             
         available_urls = [u for u in urls if u not in used_urls]
         if not available_urls:
@@ -123,7 +128,6 @@ def get_next_media():
                     random.shuffle(unique_urls)
                     with open(filename, "w", encoding="utf-8") as f:
                         f.write("\n".join(unique_urls) + "\n")
-                    # Archive used_urls.txt to cycle archive and clear it for fresh cycle
                     if os.path.exists("used_urls.txt"):
                         try:
                             with open("used_urls_cycle_archive.txt", "a", encoding="utf-8") as af:
@@ -140,46 +144,86 @@ def get_next_media():
                 print(f"No available URLs left in {filename}.")
                 return None
         
-        import requests
         temp_ext = ".mp4" if is_video else ".jpg"
         temp_file = "temp_media" + temp_ext
+        min_size = 200 * 1024 if is_video else 25 * 1024
         
-        # Loop through URLs, skip dead/404 ones
-        for chosen_url in available_urls:
-            print(f"Selected Catbox URL: {chosen_url}")
+        import random, subprocess
+        random.shuffle(available_urls)
+        attempts = 0
+        while available_urls and attempts < 5:
+            chosen_url = available_urls.pop(0)
+            print(f"Downloading from {chosen_url} (min required size: {min_size // 1024} KB)...")
+            if os.path.exists(temp_file):
+                try: os.remove(temp_file)
+                except: pass
+            
+            success_download = False
+            # 1. Primary Engine: Native curl
             try:
-                res_download = requests.get(chosen_url, headers={'User-Agent': 'Mozilla/5.0'}, stream=True, timeout=60)
-                if res_download.status_code == 200:
-                    with open(temp_file, "wb") as mf:
-                        for chunk in res_download.iter_content(chunk_size=8192):
-                            mf.write(chunk)
-                    file_size = os.path.getsize(temp_file)
-                    if file_size > 1024:  # Must be at least 1KB
-                        print(f"Downloaded successfully, size: {file_size} bytes")
-                        return {
-                            "type": "catbox",
-                            "local_path": temp_file,
-                            "media_url": chosen_url,
-                            "is_video": is_video,
-                            "original_path": None
-                        }
-                    else:
-                        print(f"Downloaded file too small ({file_size} bytes), skipping: {chosen_url}")
-                else:
-                    print(f"URL returned {res_download.status_code}, skipping: {chosen_url}")
-                # Mark dead URL as used so we skip it next time too
-                with open("used_urls.txt", "a") as uf:
-                    uf.write(chosen_url + "\n")
-                # Remove from urls file
-                if os.path.exists(filename):
-                    with open(filename, "r") as f:
-                        remaining = [l.strip() for l in f if l.strip() and l.strip() != chosen_url]
-                    with open(filename, "w") as f:
-                        f.write("\n".join(remaining))
-            except Exception as e:
-                print(f"Error downloading {chosen_url}: {e}, skipping.")
-        
-        print("All available URLs are dead/invalid.")
+                cmd = [
+                    "curl", "-s", "-L", "-f",
+                    "--connect-timeout", "4",
+                    "--max-time", "12",
+                    "--retry", "1",
+                    "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "-o", temp_file,
+                    chosen_url
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
+                if res.returncode == 0 and os.path.exists(temp_file):
+                    actual_size = os.path.getsize(temp_file)
+                    if actual_size >= min_size:
+                        print(f"[OK] Downloaded via native curl ({actual_size / 1024:.1f} KB)")
+                        success_download = True
+            except Exception as ce:
+                print(f"Notice: curl fallback triggered ({ce})")
+
+            # 2. Fallback: requests
+            if not success_download:
+                try:
+                    import requests
+                    headers = {'User-Agent': 'Mozilla/5.0', 'Connection': 'close'}
+                    with requests.get(chosen_url, headers=headers, stream=True, timeout=5) as r:
+                        if r.status_code == 200:
+                            with open(temp_file, "wb") as f:
+                                for chunk in r.iter_content(chunk_size=65536):
+                                    if chunk: f.write(chunk)
+                            actual_size = os.path.getsize(temp_file) if os.path.exists(temp_file) else 0
+                            if actual_size >= min_size:
+                                print(f"[OK] Downloaded via requests ({actual_size / 1024:.1f} KB)")
+                                success_download = True
+                except Exception as re_err:
+                    print(f"Notice: requests download failed ({re_err})")
+
+            if not success_download:
+                print(f"Failed to download valid media from {chosen_url}.")
+                attempts += 1
+                time.sleep(1)
+                continue
+
+            return {
+                "type": "catbox",
+                "local_path": temp_file,
+                "media_url": chosen_url,
+                "is_video": is_video,
+                "original_path": None
+            }
+
+        if attempts >= 5:
+            print("⚠️ External media URLs unreachable (Catbox connection timeout/outage). Activating repository media fallback...")
+            candidates = ["fallback_media.mp4", "temp_media.mp4"] if is_video else ["fallback_media.jpg", "temp_media.jpg"]
+            for fb in candidates:
+                if os.path.exists(fb) and os.path.getsize(fb) >= min_size:
+                    cdn_url = f"https://cdn.jsdelivr.net/gh/paresh101p-jpg/Auto-Insta-Mojilo@main/{fb}"
+                    print(f"✅ Loaded repository fallback media: {fb} ({cdn_url})")
+                    return {
+                        "type": "repo_fallback",
+                        "local_path": fb,
+                        "media_url": cdn_url,
+                        "is_video": is_video,
+                        "original_path": None
+                    }
         return None
 
     def get_image_from_github_folder():
@@ -246,15 +290,40 @@ def get_next_media():
         res = try_image()
         if res:
             return res
-        print("❌ IMAGE not available or failed. (Strict mode: NOT falling back to REEL)")
+        print("Notice: IMAGE not available, falling back to REEL...")
+        res = try_reel()
+        if res:
+            return res
         return None
     else:
         print("Trying to post REEL...")
         res = try_reel()
         if res:
             return res
-        print("❌ REEL not available or failed. (Strict mode: NOT falling back to IMAGE)")
+        print("Notice: REEL not available, falling back to IMAGE...")
+        res = try_image()
+        if res:
+            return res
         return None
+
+def clean_caption(text):
+    if not text:
+        return ""
+    import re
+    cleaned = re.sub(r'^\s*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    cleaned = re.sub(r'---\s*', '\n\n', cleaned)
+    cleaned = re.sub(r'\[\s*(#[a-zA-Z0-9_ऀ-ॿ]+)\s*\]', r'\1', cleaned)
+    cleaned = re.sub(r'\[(#[^\]]+)\]', r'\1', cleaned)
+    cleaned = re.sub(r'\*\*\s*\*\*', '', cleaned)
+    
+    # Enforce Instagram maximum hashtag limit (30 max permitted by IG API)
+    hashtags = re.findall(r'#[a-zA-Z0-9_ऀ-ॿ]+', cleaned)
+    if len(hashtags) > 22:
+        excess = hashtags[22:]
+        for tag in excess:
+            cleaned = re.sub(re.escape(tag) + r'(?:\s+|$)', '', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+    return cleaned.strip()
 
 def generate_caption(media_path):
     is_video = media_path.lower().endswith('.mp4')
@@ -389,14 +458,13 @@ def post_fb_video_story(local_file):
     try:
         import os
         file_size = os.path.getsize(local_file)
-        
-        # Step 1: Start
         start_payload = {
             'upload_phase': 'start',
             'access_token': FB_ACCESS_TOKEN,
             'file_size': file_size
         }
         res_start = requests.post(url, data=start_payload).json()
+        print(f"FB Video Story Start response: {res_start}")
         if 'video_id' not in res_start:
             print(f"❌ FB Video Story Start Failed: {res_start}")
             return False
@@ -404,28 +472,26 @@ def post_fb_video_story(local_file):
         video_id = res_start['video_id']
         upload_url = res_start['upload_url']
         
-        # Step 2: Upload
         with open(local_file, "rb") as vf:
-            files = {'video_file_chunk': (local_file, vf, 'video/mp4')}
-            upload_payload = {
-                'access_token': FB_ACCESS_TOKEN,
-                'upload_phase': 'transfer',
-                'start_offset': '0'
-            }
-            res_up = requests.post(upload_url, data=upload_payload, files=files)
+            video_data = vf.read()
             
-        # Give Meta's servers time to process the uploaded chunk!
-        # This prevents the "Video Upload Is Missing" error in the finish phase.
-        print("Waiting 15 seconds for Meta to process the chunk...")
-        time.sleep(15)
+        upload_headers = {
+            'Authorization': f'OAuth {FB_ACCESS_TOKEN}',
+            'offset': '0',
+            'file_size': str(file_size)
+        }
+        res_up = requests.post(upload_url, data=video_data, headers=upload_headers)
+        print(f"FB Video Story Upload response: {res_up.status_code}")
+        print("Waiting 30 seconds for Meta to process the video chunk...")
+        time.sleep(30)
             
-        # Step 3: Finish
         finish_payload = {
             'upload_phase': 'finish',
             'access_token': FB_ACCESS_TOKEN,
             'video_id': video_id
         }
         res_finish = requests.post(url, data=finish_payload).json()
+        print(f"FB Video Story Finish response: {res_finish}")
         if res_finish.get('success'):
             print(f"✅ FB Video Story Success (ID: {video_id})")
             return True
@@ -447,7 +513,7 @@ def post_fb_story(image_url):
     upload_res = requests.post(upload_url, data=upload_payload).json()
     photo_id = upload_res.get('id')
     if not photo_id:
-        print(f"âŒ FB Story Failed (photo upload step): {upload_res}")
+        print(f"❌ FB Story Failed (photo upload step): {upload_res}")
         return False
     print(f"Uploaded unpublished photo for story (photo_id: {photo_id})")
     story_url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/photo_stories"
@@ -457,18 +523,76 @@ def post_fb_story(image_url):
     }
     story_res = requests.post(story_url, data=story_payload).json()
     if story_res.get('success') or 'post_id' in story_res or 'id' in story_res:
-        print(f"âœ… FB Story Success: {story_res}")
+        print(f"✅ FB Story Success: {story_res}")
         return True
     else:
-        print(f"âŒ FB Story Failed (photo_stories step): {story_res}")
+        print(f"❌ FB Story Failed (photo_stories step): {story_res}")
         return False
 
-def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=False):
+def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=False, local_file=None):
     target = "Story" if is_story else ("Reel" if is_video else "Feed")
     print(f"Posting to Instagram {target}...")
     media_endpoint_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/media"
-    payload = {'access_token': FB_ACCESS_TOKEN}
     
+    # 1. Direct Resumable Binary Upload for Videos (Reels & Video Stories)
+    if is_video and local_file and os.path.exists(local_file):
+        try:
+            file_size = os.path.getsize(local_file)
+            print(f"Initiating Direct Resumable Upload for Instagram {target} ({file_size / (1024*1024):.2f} MB)...")
+            init_payload = {
+                'upload_type': 'resumable',
+                'media_type': 'STORIES' if is_story else 'REELS',
+                'access_token': FB_ACCESS_TOKEN
+            }
+            if not is_story:
+                init_payload['caption'] = caption
+            
+            init_res = requests.post(media_endpoint_url, data=init_payload, timeout=20).json()
+            if 'id' in init_res and 'uri' in init_res:
+                container_id = init_res['id']
+                upload_uri = init_res['uri']
+                print(f"Resumable container created: {container_id}. Uploading binary stream directly to Meta...")
+                
+                with open(local_file, "rb") as vf:
+                    video_bytes = vf.read()
+                    
+                upload_headers = {
+                    'Authorization': f'OAuth {FB_ACCESS_TOKEN}',
+                    'offset': '0',
+                    'file_size': str(file_size),
+                }
+                up_res = requests.post(upload_uri, data=video_bytes, headers=upload_headers, timeout=60)
+                print(f"Binary transfer completed with HTTP {up_res.status_code}. Waiting for Meta transcoding...")
+                
+                status = "IN_PROGRESS"
+                wait_count = 0
+                while status != "FINISHED" and wait_count < 30:
+                    time.sleep(5)
+                    wait_count += 1
+                    status_res = requests.get(f"https://graph.facebook.com/v20.0/{container_id}?fields=status_code&access_token={FB_ACCESS_TOKEN}", timeout=15).json()
+                    status = status_res.get('status_code', 'ERROR')
+                    print(f"IG Video Status ({wait_count}/30): {status}")
+                    if status == "FINISHED":
+                        break
+                    if status in ["ERROR", "EXPIRED"]:
+                        print(f"❌ IG Resumable Video Processing Failed! Error details: {status_res}")
+                        break
+                        
+                if status == "FINISHED":
+                    publish_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/media_publish"
+                    pub_res = requests.post(publish_url, data={'creation_id': container_id, 'access_token': FB_ACCESS_TOKEN}, timeout=30).json()
+                    if 'id' in pub_res:
+                        print(f"✅ IG {target} Published Successfully via Direct Upload! (ID: {pub_res['id']})")
+                        return True
+                    else:
+                        print(f"❌ IG Direct Publish Error: {pub_res}")
+                else:
+                    print(f"Warning: Direct upload processing status was '{status}'. Falling back to standard URL upload...")
+        except Exception as direct_err:
+            print(f"Notice: Direct resumable upload exception: {direct_err}. Falling back to URL method...")
+
+    # Standard URL-based container creation (Images and Fallback)
+    payload = {'access_token': FB_ACCESS_TOKEN}
     if is_video:
         payload['video_url'] = media_url
         if is_story:
@@ -485,7 +609,7 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
             
     res = requests.post(media_endpoint_url, data=payload).json()
     if 'id' not in res:
-        print(f"âŒ IG Upload Error: {res}")
+        print(f"❌ IG Upload Error: {res}")
         return False
         
     container_id = res['id']
@@ -499,7 +623,7 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
             status = status_res.get('status_code', 'ERROR')
             print(f"Video Status: {status}")
             if status == "ERROR" or status == "EXPIRED":
-                print(f"âŒ Video Processing Failed!")
+                print(f"❌ Video Processing Failed!")
                 return False
     else:
         time.sleep(25)
@@ -511,10 +635,10 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
     }
     pub_res = requests.post(publish_url, data=pub_payload).json()
     if 'id' in pub_res:
-        print(f"âœ… IG {target} Published Successfully! (ID: {pub_res['id']})")
+        print(f"✅ IG {target} Published Successfully! (ID: {pub_res['id']})")
         return True
     else:
-        print(f"âŒ IG Publish Error: {pub_res}")
+        print(f"❌ IG Publish Error: {pub_res}")
         return False
 
 def handle_failure(media_info):
@@ -617,6 +741,7 @@ if __name__ == "__main__":
         print(f"✅ Media URL for Graph API: {media_info['media_url']}")
 
         caption = generate_caption(media_info["local_path"])
+        caption = clean_caption(caption)
 
         ig_account_id = get_ig_account_id()
         ig_posting_enabled = ig_account_id is not None
@@ -631,20 +756,26 @@ if __name__ == "__main__":
             try:
                 story_local = create_story_image(media_info["local_path"])
                 if story_local != media_info["local_path"]:
-                    import os
-                    git_commit_and_push(f"Update {os.path.basename(story_local)} for CDN access")
-                    clean_story_path = story_local.replace("\\", "/")
-                    encoded_story = "/".join([urllib.parse.quote(p) for p in clean_story_path.split("/")])
-                    story_url = f"https://cdn.jsdelivr.net/gh/paresh101p-jpg/Auto-Insta-Mojilo@main/{encoded_story}"
+                    import os, shutil
+                    os.makedirs("posted_images", exist_ok=True)
+                    temp_story_name = f"story_temp_{int(time.time())}.jpg"
+                    story_git_path = f"posted_images/{temp_story_name}"
+                    shutil.copy2(story_local, story_git_path)
+                    subprocess.run(["git", "add", "-f", story_git_path], check=False)
+                    git_commit_and_push("Upload temporary story image for IG API")
+                    print("Waiting 25 seconds for GitHub/CDN to update...")
+                    time.sleep(25)
+                    cdn_story = f"https://cdn.jsdelivr.net/gh/paresh101p-jpg/Auto-Insta-Mojilo@main/{story_git_path}"
+                    story_url = cdn_story
                     print(f"Using public CDN URL for story: {story_url}")
             except Exception as story_err:
                 print(f"Warning: Story image creation failed (non-fatal): {story_err}")
 
         # ── Instagram Posts ──
         if ig_posting_enabled:
-            if retry_post(post_ig_media, ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"]):
+            if retry_post(post_ig_media, ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"], local_file=media_info["local_path"]):
                 success = True
-            retry_post(post_ig_media, ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"])
+            retry_post(post_ig_media, ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"], local_file=media_info["local_path"] if media_info["is_video"] else None)
 
         # ── Facebook Posts ──
         if media_info["is_video"]:
