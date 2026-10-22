@@ -42,10 +42,8 @@ CTA = (
     "Instagram: @MOJILOMART\n"
     "Facebook: @MojiloMart\n\n"
     "Like ❤️ | Comment 💬 | Share 🚀 | Save 📌\n\n"
-    "#mojilo #mojilomart #tshirtprinting #dtfsticker #customtshirt #suratfashion "
-    "#customprinting #surat #tshirtdesign #dtfprinting #brandedtshirts #bulkorder "
-    "#corporategifts #personalisedgifts #suratbusiness #fashionprint #trending "
-    "#customhoodies #suratprinting #printingservices"
+    "#mojilo #mojilomart #tshirtprinting #dtfsticker #customtshirt "
+    "#suratfashion #customprinting #surat #trending #tshirtdesign"
 )
 
 

@@ -316,10 +316,10 @@ def clean_caption(text):
     cleaned = re.sub(r'\[(#[^\]]+)\]', r'\1', cleaned)
     cleaned = re.sub(r'\*\*\s*\*\*', '', cleaned)
     
-    # Enforce Instagram maximum hashtag limit (30 max permitted by IG API)
+    # Enforce maximum 10 hashtags limit
     hashtags = re.findall(r'#[a-zA-Z0-9_ऀ-ॿ]+', cleaned)
-    if len(hashtags) > 22:
-        excess = hashtags[22:]
+    if len(hashtags) > 10:
+        excess = hashtags[10:]
         for tag in excess:
             cleaned = re.sub(re.escape(tag) + r'(?:\s+|$)', '', cleaned)
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
@@ -343,7 +343,7 @@ Facebook: @MojiloMart
 
 Like 👍 💬 | Comment 💬 | Share 🚀 | Save 📌
 
-4. At least 15-20 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat etc.).
+4. Exactly 8 to 10 highly relevant hashtags at the bottom (e.g., #mojilo #tshirtprinting #dtfsticker #suratfashion #customtshirts #trending #tshirtstyle #surat). Strictly maximum 10 hashtags.
 Do not include any extra text outside the caption itself."""
     
     content_to_pass = None
