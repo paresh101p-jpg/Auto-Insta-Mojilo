@@ -409,12 +409,15 @@ def get_ig_account_id():
         print(f"âŒ Error getting IG Account ID: {res}")
         return None
 
-def post_fb_feed(caption, image_url):
+def post_fb_feed(caption, image_url, product_hint=None):
     print("Posting to Facebook Feed (Photo)...")
+    fb_caption = caption
+    if "🛍️" not in fb_caption:
+        fb_caption += "\n\n🛍️ Shop this T-Shirt for ₹499: DM us to order or visit our Shop!"
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/photos"
     payload = {
         'url': image_url,
-        'message': caption,
+        'message': fb_caption,
         'access_token': FB_ACCESS_TOKEN
     }
     res = requests.post(url, data=payload).json()
@@ -425,8 +428,11 @@ def post_fb_feed(caption, image_url):
         print(f"âŒ FB Feed Failed: {res}")
         return False
 
-def post_fb_video(caption, local_file):
+def post_fb_video(caption, local_file, product_hint=None):
     print("Posting to Facebook Feed (Video) via direct file upload...")
+    fb_caption = caption
+    if "🛍️" not in fb_caption:
+        fb_caption += "\n\n🛍️ Shop this T-Shirt for ₹499: DM us to order or visit our Shop!"
     url = f"https://graph.facebook.com/v20.0/{FB_PAGE_ID}/videos"
     try:
         with open(local_file, "rb") as vf:
@@ -434,7 +440,7 @@ def post_fb_video(caption, local_file):
                 'source': (local_file, vf, 'video/mp4')
             }
             payload = {
-                'description': caption,
+                'description': fb_caption,
                 'access_token': FB_ACCESS_TOKEN
             }
             res = requests.post(url, data=payload, files=files).json()
@@ -529,7 +535,94 @@ def post_fb_story(image_url):
         print(f"❌ FB Story Failed (photo_stories step): {story_res}")
         return False
 
-def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=False, local_file=None):
+
+CATBOX_CATALOG_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catbox_catalog_cache.json")
+_SKU_CACHE_MAP = None
+
+def get_product_hint_from_url(media_url):
+    """Inverts catbox_catalog_cache to find SKU / product name from media URL."""
+    global _SKU_CACHE_MAP
+    if not media_url:
+        return None
+    if _SKU_CACHE_MAP is None:
+        _SKU_CACHE_MAP = {}
+        if os.path.exists(CATBOX_CATALOG_CACHE_FILE):
+            try:
+                with open(CATBOX_CATALOG_CACHE_FILE, "r", encoding="utf-8") as f:
+                    cache_data = json.load(f)
+                for k, v in cache_data.items():
+                    if isinstance(v, str) and v.startswith("http"):
+                        _SKU_CACHE_MAP[v.strip()] = k.strip()
+            except Exception:
+                pass
+    return _SKU_CACHE_MAP.get(str(media_url).strip())
+
+def tag_product_on_instagram(ig_account_id, ig_media_id, product_hint=None):
+    """
+    Officially tags a product from Meta Catalog onto Instagram Reel / Feed Post.
+    Endpoint: POST https://graph.facebook.com/v20.0/{ig_media_id}/product_tags
+    """
+    if not ig_account_id or not ig_media_id or not FB_ACCESS_TOKEN:
+        return False
+
+    print(f"\n🛍️ [IG SHOPPING] Checking catalog to tag product on Instagram media {ig_media_id}...")
+    target_product_id = None
+    target_product_name = "Mojilo T-Shirt"
+
+    try:
+        search_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/catalog_product_search"
+        params = {'access_token': FB_ACCESS_TOKEN}
+        if product_hint:
+            params['q'] = str(product_hint).strip()
+
+        res = requests.get(search_url, params=params, timeout=15).json()
+        items = res.get('data', [])
+
+        # Fallback to general catalog search if specific SKU search had no results
+        if not items and product_hint:
+            fallback_res = requests.get(search_url, params={'access_token': FB_ACCESS_TOKEN}, timeout=15).json()
+            items = fallback_res.get('data', [])
+
+        # Prioritize approved items
+        approved_items = [it for it in items if it.get('review_status') == 'approved']
+        chosen = approved_items[0] if approved_items else (items[0] if items else None)
+
+        if chosen:
+            target_product_id = chosen.get('product_id')
+            target_product_name = chosen.get('product_name') or chosen.get('retailer_id') or "Mojilo T-Shirt"
+            status = chosen.get('review_status', 'in_review')
+            print(f"  -> Selected Catalog Product: '{target_product_name}' (ID: {target_product_id}, Status: {status})")
+
+        if not target_product_id:
+            print("  ℹ️ [IG SHOPPING] No eligible product ID found yet (products may still be under Meta review).")
+            return False
+
+        # Apply official Meta Product Tag
+        tag_url = f"https://graph.facebook.com/v20.0/{ig_media_id}/product_tags"
+        tag_payload = {
+            'updated_tags': json.dumps([
+                {
+                    'product_id': str(target_product_id),
+                    'x': 0.5,
+                    'y': 0.5
+                }
+            ]),
+            'access_token': FB_ACCESS_TOKEN
+        }
+
+        tag_res = requests.post(tag_url, data=tag_payload, timeout=20).json()
+        if tag_res.get('success'):
+            print(f"  ✅ [IG SHOPPING SUCCESS] Product '{target_product_name}' successfully tagged on {ig_media_id}!")
+            return True
+        else:
+            print(f"  ℹ️ [IG SHOPPING] Tag response: {tag_res}")
+            return False
+
+    except Exception as e:
+        print(f"  ⚠️ [IG SHOPPING ERROR]: {e}")
+        return False
+
+def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=False, local_file=None, product_hint=None):
     target = "Story" if is_story else ("Reel" if is_video else "Feed")
     print(f"Posting to Instagram {target}...")
     media_endpoint_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/media"
@@ -582,8 +675,11 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
                     publish_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/media_publish"
                     pub_res = requests.post(publish_url, data={'creation_id': container_id, 'access_token': FB_ACCESS_TOKEN}, timeout=30).json()
                     if 'id' in pub_res:
-                        print(f"✅ IG {target} Published Successfully via Direct Upload! (ID: {pub_res['id']})")
-                        return True
+                        pub_id = pub_res['id']
+                        print(f"✅ IG {target} Published Successfully via Direct Upload! (ID: {pub_id})")
+                        if not is_story:
+                            tag_product_on_instagram(ig_account_id, pub_id, product_hint=product_hint)
+                        return pub_id
                     else:
                         print(f"❌ IG Direct Publish Error: {pub_res}")
                 else:
@@ -635,8 +731,11 @@ def post_ig_media(ig_account_id, caption, media_url, is_story=False, is_video=Fa
     }
     pub_res = requests.post(publish_url, data=pub_payload).json()
     if 'id' in pub_res:
-        print(f"✅ IG {target} Published Successfully! (ID: {pub_res['id']})")
-        return True
+        pub_id = pub_res['id']
+        print(f"✅ IG {target} Published Successfully! (ID: {pub_id})")
+        if not is_story:
+            tag_product_on_instagram(ig_account_id, pub_id, product_hint=product_hint)
+        return pub_id
     else:
         print(f"❌ IG Publish Error: {pub_res}")
         return False
@@ -771,19 +870,24 @@ if __name__ == "__main__":
             except Exception as story_err:
                 print(f"Warning: Story image creation failed (non-fatal): {story_err}")
 
+        # Detect Product SKU from catalog for Auto-Tagging
+        product_hint = get_product_hint_from_url(media_info.get("media_url"))
+        if product_hint:
+            print(f"🔍 [PRODUCT DETECTION] Detected Catalog SKU: {product_hint}")
+
         # ── Instagram Posts ──
         if ig_posting_enabled:
-            if retry_post(post_ig_media, ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"], local_file=media_info["local_path"]):
+            if retry_post(post_ig_media, ig_account_id, caption, media_info["media_url"], is_story=False, is_video=media_info["is_video"], local_file=media_info["local_path"], product_hint=product_hint):
                 success = True
             retry_post(post_ig_media, ig_account_id, caption, story_url, is_story=True, is_video=media_info["is_video"], local_file=media_info["local_path"] if media_info["is_video"] else None)
 
         # ── Facebook Posts ──
         if media_info["is_video"]:
-            if retry_post(post_fb_video, caption, media_info["local_path"]):
+            if retry_post(post_fb_video, caption, media_info["local_path"], product_hint=product_hint):
                 success = True
             retry_post(post_fb_video_story, media_info["local_path"])
         else:
-            if retry_post(post_fb_feed, caption, media_info["media_url"]):
+            if retry_post(post_fb_feed, caption, media_info["media_url"], product_hint=product_hint):
                 success = True
             retry_post(post_fb_story, story_url)
 
