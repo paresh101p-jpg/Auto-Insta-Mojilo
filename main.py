@@ -557,10 +557,12 @@ def get_product_hint_from_url(media_url):
                 pass
     return _SKU_CACHE_MAP.get(str(media_url).strip())
 
+MOJILO_CATALOG_ID = "1158633549897287"
+
 def tag_product_on_instagram(ig_account_id, ig_media_id, product_hint=None):
     """
-    Officially tags a product from Meta Catalog onto Instagram Reel / Feed Post.
-    Endpoint: POST https://graph.facebook.com/v20.0/{ig_media_id}/product_tags
+    Tags a product from Meta Catalog onto Instagram Reel / Feed Post.
+    Uses direct Catalog API query (via catalog_management) and POST /{ig_media_id}/product_tags.
     """
     if not ig_account_id or not ig_media_id or not FB_ACCESS_TOKEN:
         return False
@@ -570,40 +572,56 @@ def tag_product_on_instagram(ig_account_id, ig_media_id, product_hint=None):
     target_product_name = "Mojilo T-Shirt"
 
     try:
-        search_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/catalog_product_search"
-        params = {'access_token': FB_ACCESS_TOKEN}
-        if product_hint:
-            params['q'] = str(product_hint).strip()
-
-        res = requests.get(search_url, params=params, timeout=15).json()
-        if 'error' in res:
-            err_msg = res['error'].get('message', '')
-            err_code = res['error'].get('code', '')
-            print(f"  ⚠️ [IG SHOPPING API NOTICE]: {err_msg} (Code: {err_code})")
-            if 'permission' in err_msg.lower() or err_code == 10:
-                print("  👉 [NOTE]: Meta App Access Token requires 'instagram_shopping_tag_products' permission in Meta App Dashboard / Graph API Explorer.")
+        # 1. Query Meta Catalog directly using catalog_management permission
+        cat_url = f"https://graph.facebook.com/v21.0/{MOJILO_CATALOG_ID}/products"
+        cat_params = {
+            'fields': 'id,retailer_id,name,price,availability',
+            'limit': 50,
+            'access_token': FB_ACCESS_TOKEN
+        }
+        res = requests.get(cat_url, params=cat_params, timeout=15).json()
         items = res.get('data', [])
 
-        # Fallback to general catalog search if specific SKU search had no results
-        if not items and product_hint:
-            fallback_res = requests.get(search_url, params={'access_token': FB_ACCESS_TOKEN}, timeout=15).json()
-            items = fallback_res.get('data', [])
+        if items:
+            # If product_hint (e.g. SKU) matches retailer_id or name
+            chosen = None
+            if product_hint:
+                hint_lower = str(product_hint).strip().lower()
+                for it in items:
+                    ret_id = str(it.get('retailer_id', '')).lower()
+                    name = str(it.get('name', '')).lower()
+                    if hint_lower in ret_id or hint_lower in name:
+                        chosen = it
+                        break
 
-        # Prioritize approved items
-        approved_items = [it for it in items if it.get('review_status') == 'approved']
-        chosen = approved_items[0] if approved_items else (items[0] if items else None)
+            # Fallback to first available in-stock product
+            if not chosen:
+                in_stock = [it for it in items if it.get('availability') == 'in stock']
+                chosen = in_stock[0] if in_stock else items[0]
 
-        if chosen:
-            target_product_id = chosen.get('product_id')
-            target_product_name = chosen.get('product_name') or chosen.get('retailer_id') or "Mojilo T-Shirt"
-            status = chosen.get('review_status', 'in_review')
-            print(f"  -> Selected Catalog Product: '{target_product_name}' (ID: {target_product_id}, Status: {status})")
+            target_product_id = chosen.get('id')
+            target_product_name = chosen.get('name') or chosen.get('retailer_id') or "Mojilo T-Shirt"
+            price = chosen.get('price', '₹499.00')
+            print(f"  -> Selected Catalog Product: '{target_product_name}' (Meta ID: {target_product_id}, SKU: {chosen.get('retailer_id')}, Price: {price})")
+
+        # 2. Also try standard catalog_product_search as secondary source
+        if not target_product_id:
+            search_url = f"https://graph.facebook.com/v20.0/{ig_account_id}/catalog_product_search"
+            params = {'access_token': FB_ACCESS_TOKEN}
+            if product_hint:
+                params['q'] = str(product_hint).strip()
+            res_search = requests.get(search_url, params=params, timeout=15).json()
+            items_search = res_search.get('data', [])
+            if items_search:
+                chosen_s = items_search[0]
+                target_product_id = chosen_s.get('product_id')
+                target_product_name = chosen_s.get('product_name') or "Mojilo T-Shirt"
 
         if not target_product_id:
-            print("  ℹ️ [IG SHOPPING] No eligible product ID found yet (products may still be under Meta review).")
+            print("  ℹ️ [IG SHOPPING] No eligible product found in catalog.")
             return False
 
-        # Apply official Meta Product Tag
+        # 3. Apply official Meta Product Tag on Instagram Media
         tag_url = f"https://graph.facebook.com/v20.0/{ig_media_id}/product_tags"
         tag_payload = {
             'updated_tags': json.dumps([
@@ -621,7 +639,12 @@ def tag_product_on_instagram(ig_account_id, ig_media_id, product_hint=None):
             print(f"  ✅ [IG SHOPPING SUCCESS] Product '{target_product_name}' successfully tagged on {ig_media_id}!")
             return True
         else:
-            print(f"  ℹ️ [IG SHOPPING] Tag response: {tag_res}")
+            err = tag_res.get('error', {})
+            err_subcode = err.get('error_subcode')
+            if err_subcode == 33:
+                print(f"  ℹ️ [IG SHOPPING NOTICE] Meta API Tagging requires App Review for live API tagging. Product is active in profile Shop ('View Shop' button) and can also be tagged directly in Instagram App via Edit -> Tag Products.")
+            else:
+                print(f"  ℹ️ [IG SHOPPING] Tag response: {tag_res}")
             return False
 
     except Exception as e:
