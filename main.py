@@ -26,7 +26,7 @@ if FB_PAGE_ID == "YAHAN_APNA_NAYA_PAGE_ID_DALNA_HAI":
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 IMAGES_FOLDER = "images"
-GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-pro", "gemini-3.8-flash", "gemini-3.7-flash"]
+GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 # Yahan naye repo ka naam aayega (e.g., Auto-Insta-Mojilo)
 GITHUB_REPO_RAW_URL = "https://raw.githubusercontent.com/paresh101p-jpg/Auto-Insta-Mojilo/main/"
 
@@ -576,6 +576,12 @@ def tag_product_on_instagram(ig_account_id, ig_media_id, product_hint=None):
             params['q'] = str(product_hint).strip()
 
         res = requests.get(search_url, params=params, timeout=15).json()
+        if 'error' in res:
+            err_msg = res['error'].get('message', '')
+            err_code = res['error'].get('code', '')
+            print(f"  ⚠️ [IG SHOPPING API NOTICE]: {err_msg} (Code: {err_code})")
+            if 'permission' in err_msg.lower() or err_code == 10:
+                print("  👉 [NOTE]: Meta App Access Token requires 'instagram_shopping_tag_products' permission in Meta App Dashboard / Graph API Explorer.")
         items = res.get('data', [])
 
         # Fallback to general catalog search if specific SKU search had no results
